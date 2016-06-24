@@ -640,7 +640,7 @@ function setupSettingsFileForTestImpact(vsVersion: number, settingsFile: string)
         }
     }
     else {
-        tl.debug("Settings are not sufficient for setting test impact. Not updating the settings file")
+        tl.debug("Settings are not sufficient for setting test impact. Not updating the settings file");
         defer.resolve(settingsFile);
     }
     return defer.promise;
