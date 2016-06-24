@@ -187,6 +187,7 @@
     "UpdateOneOrHigherRequired": "ms-resource:loc.messages.UpdateOneOrHigherRequired",
     "ErrorOccuredWhileSettingRegistry": "ms-resource:loc.messages.ErrorOccuredWhileSettingRegistry",
     "FailedToSetTestImpactCollectorTestSettings": "ms-resource:loc.messages.FailedToSetTestImpactCollectorTestSettings",
-    "FailedToSetTestImpactCollectorRunSettings": "ms-resource:loc.messages.FailedToSetTestImpactCollectorRunSettings"
+    "FailedToSetTestImpactCollectorRunSettings": "ms-resource:loc.messages.FailedToSetTestImpactCollectorRunSettings",
+    "FailedToUpdateResponseFile": "ms-resource:loc.messages.FailedToUpdateResponseFile"
   }
 }

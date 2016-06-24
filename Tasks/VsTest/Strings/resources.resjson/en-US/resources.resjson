@@ -44,5 +44,6 @@
   "loc.messages.UpdateOneOrHigherRequired": "Install Visual Studio 2015 Update 1 or higher on your build agent machine to run the tests in parallel.",
   "loc.messages.ErrorOccuredWhileSettingRegistry": "Error occured while setting registry key, Error: %s.",
   "loc.messages.FailedToSetTestImpactCollectorTestSettings": "Failed to set Test Impact Collector. Invalid test settings file.",
-  "loc.messages.FailedToSetTestImpactCollectorRunSettings": "Failed to set Test Impact Collector. Invalid run settings file."
+  "loc.messages.FailedToSetTestImpactCollectorRunSettings": "Failed to set Test Impact Collector. Invalid run settings file.",
+  "loc.messages.FailedToUpdateResponseFile": "Failed to update the response file %s. All the tests will be executed for this run."
 }
