@@ -35,7 +35,7 @@ try {
     var publishRunAttachments: string = tl.getInput('publishRunAttachments');
     var runInParallel: boolean = tl.getBoolInput('runInParallel');
     var tiaEnabled = tl.getVariable('tia.enabled');
-    var tiaResponseFile = tl.getVariable('tia.responsefile');
+    var tiaSelectorTool = tl.getVariable('tia.selectortool');
 
     tl._writeLine("##vso[task.logissue type=warning;TaskName=VSTest]");
 
@@ -107,7 +107,7 @@ function getTestAssemblies(): Set<string> {
     return new Set(testAssemblyFiles);
 }
 
-function getVstestArgsArray(settingsFile: string): string[] {
+function getVstestArguments(settingsFile: string): string[] {
     var argsArray: string[] = [];
     testAssemblyFiles.forEach(function (testAssembly) {
         var testAssemblyPath = testAssembly;
@@ -153,14 +153,131 @@ function addVstestArgs(argsArray: string[], vstest: any) {
     });
 }
 
-function updateResponsefile(argsArray: string[], responseFile: string): Q.Promise<string> {
+function updateResponseFile(argsArray: string[], responseFile: string): Q.Promise<string> {
     var defer = Q.defer<string>();
     fs.appendFile(responseFile, os.EOL + argsArray.join(os.EOL), function (err) {
         if (err) {
             defer.reject(err);
         }
-        defer.resolve("\"" + responseFile + "\"");
+        defer.resolve(responseFile);
     });
+    return defer.promise;
+}
+
+
+function generateResponseFile(): Q.Promise<string> {
+    var defer = Q.defer<string>();
+    var tempFile = path.join(os.tmpdir(), uuid.v1() + ".txt");
+    tl.debug("Response file will be generated at " + tempFile);
+    var selectortool = tl.createToolRunner(tiaSelectorTool);
+    selectortool.arg("GetImpactedtests");
+    selectortool.arg("/TfsTeamProjectCollection:" + tl.getVariable("System.TeamFoundationCollectionUri"));
+    selectortool.arg("/ProjectId:" + tl.getVariable("System.TeamProject"));
+    selectortool.arg("/buildid:" + tl.getVariable("Build.BuildId"));
+    selectortool.arg("/token:" + tl.getVariable("System.AccessToken"));
+    selectortool.arg("/responsefile:" + tempFile);
+    selectortool.exec()
+        .then(function (code) {
+            defer.resolve(tempFile);
+        })
+        .fail(function (err) {
+            defer.reject(err);
+        });
+
+    return defer.promise;
+}
+
+function executeVstest(testResultsDirectory: string, parallelRunSettingsFile: string, vsVersion: number, argsArray: string[]): Q.Promise<number> {
+    var defer = Q.defer<number>();
+    var vsCommon = tl.getVariable("VS" + vsVersion + "0COMNTools");
+    if (!vsCommon) {
+        tl.error(tl.loc('VstestNotFound', vsVersion));
+        defer.resolve(1);
+        return defer.promise;
+    }
+    var vstestLocation = path.join(vsCommon, "..\\IDE\\CommonExtensions\\Microsoft\\TestWindow\\vstest.console.exe");
+    var vstest = tl.createToolRunner(vstestLocation);
+    addVstestArgs(argsArray, vstest);
+
+    tl.rmRF(testResultsDirectory, true);
+    tl.mkdirP(testResultsDirectory);
+    tl.cd(workingDirectory);
+    vstest.exec()
+        .then(function (code) {
+            cleanUp(parallelRunSettingsFile);
+            defer.resolve(code);
+        })
+        .fail(function (err) {
+            cleanUp(parallelRunSettingsFile);
+            tl.warning(tl.loc('VstestFailed'));
+            tl.error(err);
+            defer.resolve(1);
+        });
+    return defer.promise;
+}
+
+function runVStest(testResultsDirectory: string, settingsFile: string, vsVersion: number): Q.Promise<number> {
+    var defer = Q.defer<number>();
+    if (isTiaAllowed()) {
+        generateResponseFile()
+            .then(function (responseFile) {
+                if (isNonEmptyResponseFile(responseFile)) {
+                    updateResponseFile(getVstestArguments(settingsFile), responseFile)
+                        .then(function (updatedFile) {
+                            executeVstest(testResultsDirectory, settingsFile, vsVersion, ["@" + updatedFile])
+                                .then(function (code) {
+                                    defer.resolve(code);
+                                })
+                                .fail(function (code) {
+                                    defer.resolve(code);
+                                });
+                        })
+                        .fail(function (err) {
+                            tl.error(err);
+                            tl.warning(tl.loc('ErrorWhileUpdatingResponseFile', responseFile));
+                            executeVstest(testResultsDirectory, settingsFile, vsVersion, getVstestArguments(settingsFile))
+                                .then(function (code) {
+                                    defer.resolve(code);
+                                })
+                                .fail(function (code) {
+                                    defer.resolve(code);
+                                });
+                        });
+                }
+                else {
+                    tl.debug("Empty response file detected. All tests will be executed.");
+                    executeVstest(testResultsDirectory, settingsFile, vsVersion, getVstestArguments(settingsFile))
+                        .then(function (code) {
+                            defer.resolve(code);
+                        })
+                        .fail(function (code) {
+                            defer.resolve(code);
+                        });
+                }
+                tl.rmRF(responseFile, true);
+            })
+            .fail(function (err) {
+                tl.error(err);
+                tl.warning(tl.loc('ErrorWhileCreatingResponseFile'));
+                executeVstest(testResultsDirectory, settingsFile, vsVersion, getVstestArguments(settingsFile))
+                    .then(function (code) {
+                        defer.resolve(code);
+                    })
+                    .fail(function (code) {
+                        defer.resolve(code);
+                    });
+            });
+    }
+    else {
+        tl.debug("Non TIA mode of test execution");
+        executeVstest(testResultsDirectory, settingsFile, vsVersion, getVstestArguments(settingsFile))
+            .then(function (code) {
+                defer.resolve(code);
+            })
+            .fail(function (code) {
+                defer.resolve(code);
+            });
+    }
     return defer.promise;
 }
 
@@ -178,46 +295,12 @@ function invokeVSTest(testResultsDirectory: string): Q.Promise<number> {
                             setRunInParallellIfApplicable(vsVersion);
                             setupRunSettingsFileForParallel(runInParallel, runSettingswithTestImpact)
                                 .then(function (parallelRunSettingsFile) {
-                                    var vsCommon = tl.getVariable("VS" + vsVersion + "0COMNTools");
-                                    if (!vsCommon) {
-                                        tl.error(tl.loc('VstestNotFound', vsVersion));
-                                        defer.resolve(1);
-                                        return defer.promise;
-                                    }
-                                    var vstestLocation = path.join(vsCommon, "..\\IDE\\CommonExtensions\\Microsoft\\TestWindow\\vstest.console.exe");
-                                    var vstest = tl.createToolRunner(vstestLocation);
-
-                                    var argsArray = getVstestArgsArray(parallelRunSettingsFile);
-                                    if (runOnlyImpactedTests()) {
-                                        tl.debug("");
-                                        updateResponsefile(argsArray, tiaResponseFile)
-                                            .then(function (resFile) {
-                                                vstest.arg("@" + resFile);
-                                                tl.debug("Successfully updated the response file " + resFile);
-                                            })
-                                            .fail(function (err) {
-                                                tl.warning(tl.loc('FailedToUpdateResponseFile',tiaResponseFile));
-                                                tl.error(err);
-                                                addVstestArgs(argsArray, vstest);
-                                            });
-                                    }
-                                    else {
-                                        addVstestArgs(argsArray, vstest);
-                                    }
-
-                                    tl.rmRF(testResultsDirectory, true);
-                                    tl.mkdirP(testResultsDirectory);
-                                    tl.cd(workingDirectory);
-                                    vstest.exec()
+                                    runVStest(testResultsDirectory, parallelRunSettingsFile, vsVersion)
                                         .then(function (code) {
-                                            cleanUp(parallelRunSettingsFile);
                                             defer.resolve(code);
                                         })
-                                        .fail(function (err) {
-                                            cleanUp(parallelRunSettingsFile);
-                                            tl.warning(tl.loc('VstestFailed'));
-                                            tl.error(err);
-                                            defer.resolve(1);
+                                        .fail(function (code) {
+                                            defer.resolve(code);
                                         });
                                 })
                                 .fail(function (err) {
@@ -472,7 +555,7 @@ function updateRunSettingsFileForTestImpact(vsVersion: number, settingsFile: str
                     return defer.promise;
                 }
                 if (result.RunSettings === undefined) {
-                    tl.warning(tl.loc('FailedToSetTestImpactCollectorRunSettings'));
+                    tl.warning(tl.loc('ErrorWhileSettingTestImpactCollectorRunSettings'));
                     defer.resolve(settingsFile);
                     return defer.promise;
                 }
@@ -571,7 +654,7 @@ function updateTestSettingsFileForTestImpact(vsVersion: number, settingsFile: st
                     return defer.promise;
                 }
                 if (result.TestSettings === undefined) {
-                    tl.warning(tl.loc('FailedToSetTestImpactCollectorTestSettings'));
+                    tl.warning(tl.loc('ErrorWhileSettingTestImpactCollectorTestSettings'));
                     defer.resolve(settingsFile);
                     return defer.promise;
                 }
@@ -843,19 +926,15 @@ function pathExistsAsDirectory(path: string) {
     return tl.exist(path) && tl.stats(path).isDirectory();
 }
 
-function runOnlyImpactedTests(): boolean {
-    if (isTiaAllowed()) {
-        if (!pathExistsAsFile(tiaResponseFile) || !tl.stats(tiaResponseFile).size) {
-            tl.debug("TIA response file empty/missing. All the tests will be executed.");
-            return false;
-        }
+function isNonEmptyResponseFile(responseFile: string): boolean {
+    if (pathExistsAsFile(responseFile) && tl.stats(responseFile).size) {
         return true;
     }
     return false;
 }
 
 function isTiaAllowed(): boolean {
-    if (tiaEnabled && tiaEnabled.toUpperCase() == "TRUE" && tiaResponseFile) {
+    if (tiaEnabled && tiaEnabled.toUpperCase() == "TRUE" && tiaSelectorTool) {
         return true;
     }
     return false;

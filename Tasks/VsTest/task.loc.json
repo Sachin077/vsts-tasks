@@ -186,8 +186,9 @@
     "FailedToSetRunInParallel": "ms-resource:loc.messages.FailedToSetRunInParallel",
     "UpdateOneOrHigherRequired": "ms-resource:loc.messages.UpdateOneOrHigherRequired",
     "ErrorOccuredWhileSettingRegistry": "ms-resource:loc.messages.ErrorOccuredWhileSettingRegistry",
-    "FailedToSetTestImpactCollectorTestSettings": "ms-resource:loc.messages.FailedToSetTestImpactCollectorTestSettings",
-    "FailedToSetTestImpactCollectorRunSettings": "ms-resource:loc.messages.FailedToSetTestImpactCollectorRunSettings",
-    "FailedToUpdateResponseFile": "ms-resource:loc.messages.FailedToUpdateResponseFile"
+    "ErrorWhileSettingTestImpactCollectorTestSettings": "ms-resource:loc.messages.ErrorWhileSettingTestImpactCollectorTestSettings",
+    "ErrorWhileSettingTestImpactCollectorRunSettings": "ms-resource:loc.messages.ErrorWhileSettingTestImpactCollectorRunSettings",
+    "ErrorWhileCreatingResponseFile": "ms-resource:loc.messages.ErrorWhileCreatingResponseFile",
+    "ErrorWhileUpdatingResponseFile": "ms-resource:loc.messages.ErrorWhileUpdatingResponseFile"
   }
 }
