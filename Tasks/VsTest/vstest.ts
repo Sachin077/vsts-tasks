@@ -843,7 +843,7 @@ function pathExistsAsDirectory(path: string) {
     return tl.exist(path) && tl.stats(path).isDirectory();
 }
 
-function runOnlyImpactedTests(): Boolean {
+function runOnlyImpactedTests(): boolean {
     if (isTiaAllowed()) {
         if (!pathExistsAsFile(tiaResponseFile) || !tl.stats(tiaResponseFile).size) {
             tl.debug("TIA response file empty/missing. All the tests will be executed.");
@@ -854,7 +854,7 @@ function runOnlyImpactedTests(): Boolean {
     return false;
 }
 
-function isTiaAllowed(): Boolean {
+function isTiaAllowed(): boolean {
     if (tiaEnabled && tiaEnabled.toUpperCase() == "TRUE" && tiaResponseFile) {
         return true;
     }
